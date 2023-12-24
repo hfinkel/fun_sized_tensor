@@ -458,38 +458,48 @@ struct indexed_tensor_exp : public indexed_exp {
   }
 
 private:
-  template <std::size_t LIdx, typename TET, typename... VTs>
+  template <std::size_t LIdxMax, std::size_t LIdx, typename TET, typename... VTs>
   void do_assign_loop(const TET &ie, VTs &...vs) {
-    static_assert(has_index<LIdx>() || TET::template has_index<LIdx>());
-    std::size_t n = has_index<LIdx>() ?
-      dim_size_for_index_use<LIdx>() : ie.template dim_size_for_index_use<LIdx>();
-
-    for (std::size_t i = 0; i < n; ++i) {
+    // The offset of the lower bound is at 2*LIdx, plus the additional (LIdxMax-LIdx) = LIdx+LidxMax.
+    for (std::size_t i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...); ++i) {
       if constexpr (LIdx > 0) {
-        do_assign_loop<LIdx-1, TET, std::size_t, VTs...>(ie, i, vs...);
+        do_assign_loop<LIdxMax, LIdx-1, TET, std::size_t, VTs...>(ie, i, vs...);
       } else {
         tref(ith_value<IndexTs::i>(i, vs...)...) += ie.eval(i, vs...);
       }
     }
   }
 
+  template <std::size_t LIdxMax, std::size_t LIdx, typename TET, typename... VTs>
+  void do_assign_loop_setup(const TET &ie, VTs &...vs) {
+    static_assert(has_index<LIdx>() || TET::template has_index<LIdx>());
+    std::size_t z = 0;
+    std::size_t n = has_index<LIdx>() ?
+      dim_size_for_index_use<LIdx>() : ie.template dim_size_for_index_use<LIdx>();
+
+    if constexpr (LIdx > 0)
+      do_assign_loop_setup<LIdxMax, LIdx-1, TET, std::size_t, std::size_t, VTs...>(ie, z, n, vs...);
+    else
+      do_assign_loop<LIdxMax, LIdxMax, TET, std::size_t, std::size_t, VTs...>(ie, z, n, vs...);
+  }
+
 public:
   template <typename TET, typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
   indexed_tensor_exp<TT, IndexTs...> & operator = (const TET &ie) {
     std::fill(tref.begin(), tref.end(), 0);
-    do_assign_loop<TET::max_index(), TET>(ie);
+    do_assign_loop_setup<TET::max_index(), TET::max_index(), TET>(ie);
     return *this;
   }
 
   template <typename TET, typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
   indexed_tensor_exp<TT, IndexTs...> & operator += (const TET &ie) {
-    do_assign_loop<TET::max_index(), TET>(ie);
+    do_assign_loop_setup<TET::max_index(), TET::max_index(), TET>(ie);
     return *this;
   }
 
   template <typename TET, typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
   indexed_tensor_exp<TT, IndexTs...> & operator -= (const TET &ie) {
-    do_assign_loop<TET::max_index(), TET>(-ie);
+    do_assign_loop_setup<TET::max_index(), TET::max_index(), TET>(-ie);
     return *this;
   }
 
