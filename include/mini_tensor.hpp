@@ -16,6 +16,10 @@
 #ifndef MINI_TENSOR_HPP_INCLUDED
 #define MINI_TENSOR_HPP_INCLUDED
 
+#ifndef MINI_TENSOR_RECURSE_SIZE
+#define MINI_TENSOR_RECURSE_SIZE 16
+#endif
+
 namespace mini_tensor {
 namespace detail {
 template <std::size_t I, typename T0, typename... Ts>
@@ -459,7 +463,7 @@ struct indexed_tensor_exp : public indexed_exp {
 
 private:
   template <std::size_t LIdxMax, std::size_t LIdx, typename TET, typename... VTs>
-  void do_assign_loop(const TET &ie, VTs &...vs) {
+  void do_assign_loop(const TET &ie, VTs ...vs) {
     // The offset of the lower bound is at 2*LIdx, plus the additional (LIdxMax-LIdx) = LIdx+LidxMax.
     for (std::size_t i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...); ++i) {
       if constexpr (LIdx > 0) {
@@ -470,36 +474,89 @@ private:
     }
   }
 
-  template <std::size_t LIdxMax, std::size_t LIdx, typename TET, typename... VTs>
-  void do_assign_loop_setup(const TET &ie, VTs &...vs) {
+  template <std::size_t Rec, std::size_t LIdxMax, typename TET, typename... VTs, std::size_t... Is>
+  void do_assign_loop_rec(const TET &ie, std::index_sequence<Is...> is, VTs ...vs) {
+    if constexpr (Rec) {
+      // Use a cache-oblivious looping structure (based on the well-known
+      // work by Frigo et al.). Split the largest dimension (so long as the
+      // largest dimension is not greater than Rec).
+
+      std::size_t bounds[sizeof...(VTs)] = { vs... };
+
+      std::size_t ms = 0, msi = 0;
+      for (std::size_t i = 0; i < LIdxMax; i += 2) {
+        std::size_t s = bounds[i+1] - bounds[i];
+        if (s > ms) {
+          ms = s;
+          msi = i;
+        }
+      }
+
+      if (ms > Rec) {
+        std::size_t bounds_l[sizeof...(VTs)] = { vs... };
+        std::size_t bounds_u[sizeof...(VTs)] = { vs... };
+
+        bounds_l[msi+1] -= (ms+1)/2;
+        bounds_u[msi]   += ms/2;
+
+        do_assign_loop_rec<Rec, LIdxMax, TET>(ie, is, bounds_l[Is]...);
+        do_assign_loop_rec<Rec, LIdxMax, TET>(ie, is, bounds_u[Is]...);
+        return;
+      }
+    }
+
+    do_assign_loop<LIdxMax, LIdxMax, TET, VTs...>(ie, vs...);
+  }
+
+  template <std::size_t Rec, std::size_t LIdxMax, typename TET, typename... VTs>
+  void do_assign_loop_rec(const TET &ie, VTs ...vs) {
+    do_assign_loop_rec<Rec, LIdxMax>(ie, std::index_sequence_for<VTs...>{}, vs...);
+  }
+
+  template <std::size_t Rec, std::size_t LIdxMax, std::size_t LIdx, typename TET, typename... VTs>
+  void do_assign_loop_setup(const TET &ie, VTs ...vs) {
     static_assert(has_index<LIdx>() || TET::template has_index<LIdx>());
-    std::size_t z = 0;
     std::size_t n = has_index<LIdx>() ?
       dim_size_for_index_use<LIdx>() : ie.template dim_size_for_index_use<LIdx>();
 
     if constexpr (LIdx > 0)
-      do_assign_loop_setup<LIdxMax, LIdx-1, TET, std::size_t, std::size_t, VTs...>(ie, z, n, vs...);
+      do_assign_loop_setup<Rec, LIdxMax, LIdx-1, TET, std::size_t, std::size_t, VTs...>(ie, 0, n, vs...);
     else
-      do_assign_loop<LIdxMax, LIdxMax, TET, std::size_t, std::size_t, VTs...>(ie, z, n, vs...);
+      do_assign_loop_rec<Rec, LIdxMax, TET, std::size_t, std::size_t, VTs...>(ie, 0, n, vs...);
   }
 
 public:
   template <typename TET, typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
   indexed_tensor_exp<TT, IndexTs...> & operator = (const TET &ie) {
     std::fill(tref.begin(), tref.end(), 0);
-    do_assign_loop_setup<TET::max_index(), TET::max_index(), TET>(ie);
+    do_assign_loop_setup<MINI_TENSOR_RECURSE_SIZE, TET::max_index(), TET::max_index(), TET>(ie);
     return *this;
   }
 
   template <typename TET, typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
   indexed_tensor_exp<TT, IndexTs...> & operator += (const TET &ie) {
-    do_assign_loop_setup<TET::max_index(), TET::max_index(), TET>(ie);
+    do_assign_loop_setup<MINI_TENSOR_RECURSE_SIZE, TET::max_index(), TET::max_index(), TET>(ie);
     return *this;
   }
 
   template <typename TET, typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
   indexed_tensor_exp<TT, IndexTs...> & operator -= (const TET &ie) {
-    do_assign_loop_setup<TET::max_index(), TET::max_index(), TET>(-ie);
+    do_assign_loop_setup<MINI_TENSOR_RECURSE_SIZE, TET::max_index(), TET::max_index(), TET>(-ie);
+    return *this;
+  }
+
+  template <std::size_t Rec = MINI_TENSOR_RECURSE_SIZE, typename TET,
+            typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
+  indexed_tensor_exp<TT, IndexTs...> & assign(const TET &ie) {
+    std::fill(tref.begin(), tref.end(), 0);
+    do_assign_loop_setup<Rec, TET::max_index(), TET::max_index(), TET>(ie);
+    return *this;
+  }
+
+  template <std::size_t Rec = MINI_TENSOR_RECURSE_SIZE, typename TET,
+            typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
+  indexed_tensor_exp<TT, IndexTs...> & update(const TET &ie) {
+    do_assign_loop_setup<Rec, TET::max_index(), TET::max_index(), TET>(ie);
     return *this;
   }
 
