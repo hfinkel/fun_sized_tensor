@@ -6,7 +6,9 @@
 
 #include <array>
 #include <algorithm>
+#include <cstdlib>
 #include <functional>
+#include <limits>
 #include <new>
 #include <numeric>
 #include <tuple>
@@ -27,8 +29,11 @@
 
 #ifndef MINI_TENSOR_ARRAY_ALIGNMENT
 // hardware_destructive_interference_size was added in C++17, but many
-// implementations were not quick to ship it. Provide a reasonable fallback.
-#ifdef __cpp_lib_hardware_interference_size
+// implementations were not quick to ship it. Also, using it, by default,
+// produces a warning under GCC (without the -Wno-interference-size flag).
+// Thus, we'll provide a way to use it, but won't do so by default. Provide a
+// reasonable fallback.
+#if defined(__cpp_lib_hardware_interference_size) && defined(MINI_TENSOR_USE_INTERFERENCE_SIZE)
 #define MINI_TENSOR_ARRAY_ALIGNMENT std::hardware_destructive_interference_size
 #else
 #define MINI_TENSOR_ARRAY_ALIGNMENT 64
@@ -851,8 +856,68 @@ public:
 };
 } // namespace detail
 
+template <typename T, std::size_t Align = MINI_TENSOR_ARRAY_ALIGNMENT>
+struct aligned_allocator {
+  using value_type = T;
+  using size_type = std::size_t;
+  using difference_type = std::ptrdiff_t;
+  using pointer = T*;
+  using const_pointer = const T*;
+  using reference = T&;
+  using const_reference = const T&;
+
+  template <typename U>
+  struct rebind {
+    using other = aligned_allocator<U, Align>;
+  };
+
+  aligned_allocator() {}
+  aligned_allocator(const aligned_allocator &) {}
+
+  template <class U>
+  aligned_allocator(const aligned_allocator<U, Align> &) {}
+
+  ~aligned_allocator() {}
+
+  pointer address(reference r) { return &r; }
+  const_pointer address(const_reference r) const { return &r; }
+
+  pointer allocate(size_type n,
+                   typename std::allocator<void>::const_pointer hint = 0) {
+    // According to https://en.cppreference.com/w/cpp/memory/c/aligned_alloc,
+    // std::aligned_alloc is unsupported under MSCRT because "std::free is
+    // unable to handle aligned allocations."
+#if defined(_MSC_VER)
+    return static_cast<pointer>(_aligned_malloc(n * sizeof(T), Align));
+#else
+    return static_cast<pointer>(std::aligned_alloc(Align, n * sizeof(T)));
+#endif
+  }
+
+  void deallocate(pointer p, size_type) {
+#if defined(_MSC_VER)
+    return _aligned_free(p);
+#else
+    std::free(p);
+#endif
+  }
+
+  void construct(pointer p, const_reference v) { new (p) value_type(v); }
+  void destroy(pointer p) { p->~value_type(); }
+
+  size_type max_size() const {
+    return (std::numeric_limits<std::ptrdiff_t>::max)()/sizeof(T);
+  }
+
+  bool operator==(const aligned_allocator &) { return true; }
+  bool operator!=(const aligned_allocator &a) { return !operator == (a); }
+};
+
+template <typename T>
+using aligned_vector = std::vector<T, aligned_allocator<T>>;
+
 template <typename T, typename DimsT,
-          template <typename, typename...> typename ContainerT = std::vector,
+          template <typename, typename...> typename ContainerT = aligned_vector,
           typename... ContainerTTs>
 struct tensor_odyn :
   public detail::tensor_base<tensor_odyn<T, DimsT, ContainerT, ContainerTTs...>,
