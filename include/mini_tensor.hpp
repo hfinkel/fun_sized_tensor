@@ -20,6 +20,10 @@
 #define MINI_TENSOR_RECURSE_SIZE 16
 #endif
 
+#ifndef MINI_TENSOR_UNROLL_COUNT
+#define MINI_TENSOR_UNROLL_COUNT 4
+#endif
+
 namespace mini_tensor {
 namespace detail {
 template <std::size_t I, typename T0, typename... Ts>
@@ -411,7 +415,97 @@ protected:
   const TT &tref;
 };
 
-template <typename TT, typename... IndexTs>
+struct opt_base {
+  template <std::size_t I>
+  static constexpr bool should_vec() {
+    return false;
+  }
+
+  template <std::size_t I>
+  static constexpr bool should_unroll() {
+    return false;
+  }
+
+  static constexpr std::size_t get_unroll() {
+    return 0;
+  }
+
+  static constexpr bool has_rec() {
+    return false;
+  }
+
+  static constexpr std::size_t get_rec() {
+    return 0;
+  }
+};
+
+template<typename... IndexTs>
+struct opt_vec : public opt_base {
+  template <std::size_t I>
+  static constexpr bool should_vec() {
+    return ((IndexTs::i == I) || ...);
+  }
+};
+
+template<std::size_t UCount, typename... IndexTs>
+struct opt_unroll : public opt_base {
+  template <std::size_t I>
+  static constexpr bool should_unroll() {
+    return ((IndexTs::i == I) || ...);
+  }
+
+  static constexpr std::size_t get_unroll() {
+    return UCount;
+  }
+};
+
+template<std::size_t Rec>
+struct opt_rec : public opt_base {
+  static constexpr bool has_rec() {
+    return true;
+  }
+
+  static constexpr std::size_t get_rec() {
+    return Rec;
+  }
+};
+
+template <typename... Opts>
+struct opts_list {
+  template <std::size_t I>
+  static constexpr bool should_vec() {
+    return (Opts::template should_vec<I>() || ...);
+  }
+
+  template<typename... OptIndexTs>
+  using with_vec = opts_list<Opts..., opt_vec<OptIndexTs...>>;
+
+  template <std::size_t I>
+  static constexpr bool should_unroll() {
+    return (Opts::template should_unroll<I>() || ...);
+  }
+
+  template <std::size_t I>
+  static constexpr std::size_t get_unroll() {
+    return (std::size_t(0) + ... +
+            (Opts::template should_unroll<I>() ? Opts::get_unroll() : 0));
+  }
+
+  template<std::size_t UCount, typename... OptIndexTs>
+  using with_unroll = opts_list<Opts..., opt_unroll<UCount, OptIndexTs...>>;
+
+  static constexpr std::size_t get_rec() {
+    if (!(Opts::has_rec() || ...))
+      return MINI_TENSOR_RECURSE_SIZE;
+
+    return (std::size_t(0) + ... + Opts::get_rec());
+  }
+
+  template <std::size_t Rec>
+  using with_rec = opts_list<Opts..., opt_rec<Rec>>;
+};
+
+template <typename TT, typename OptsL, typename... IndexTs>
 struct indexed_tensor_exp : public indexed_exp {
   indexed_tensor_exp(TT &tref) : tref(tref) {}
 
@@ -438,25 +532,25 @@ struct indexed_tensor_exp : public indexed_exp {
     return tref(ith_value<IndexTs::i>(idxs...)...);
   }
 
-  indexed_tensor_exp<TT, IndexTs...> & operator = (const indexed_tensor_exp<TT, IndexTs...> &ite) {
+  indexed_tensor_exp<TT, OptsL, IndexTs...> & operator = (const indexed_tensor_exp<TT, OptsL, IndexTs...> &ite) {
     tref = ite.tref;
     return *this;
   }
 
-  template <typename TT2>
-  indexed_tensor_exp<TT, IndexTs...> & operator = (const indexed_tensor_exp<TT2, IndexTs...> &ite) {
+  template <typename TT2, typename OptsL2>
+  indexed_tensor_exp<TT, OptsL, IndexTs...> & operator = (const indexed_tensor_exp<TT2, OptsL2, IndexTs...> &ite) {
     tref = ite.tref;
     return *this;
   }
 
-  template <typename TT2>
-  indexed_tensor_exp<TT, IndexTs...> & operator += (const indexed_tensor_exp<TT2, IndexTs...> &ite) {
+  template <typename TT2, typename OptsL2>
+  indexed_tensor_exp<TT, OptsL, IndexTs...> & operator += (const indexed_tensor_exp<TT2, OptsL2, IndexTs...> &ite) {
     tref += ite.tref;
     return *this;
   }
 
-  template <typename TT2>
-  indexed_tensor_exp<TT, IndexTs...> & operator -= (const indexed_tensor_exp<TT2, IndexTs...> &ite) {
+  template <typename TT2, typename OptsL2>
+  indexed_tensor_exp<TT, OptsL, IndexTs...> & operator -= (const indexed_tensor_exp<TT2, OptsL2, IndexTs...> &ite) {
     tref -= ite.tref;
     return *this;
   }
@@ -464,22 +558,77 @@ struct indexed_tensor_exp : public indexed_exp {
 private:
   template <std::size_t LIdxMax, std::size_t LIdx, typename TET, typename... VTs>
   void do_assign_loop(const TET &ie, VTs ...vs) {
-    // The offset of the lower bound is at 2*LIdx, plus the additional (LIdxMax-LIdx) = LIdx+LidxMax.
-    for (std::size_t i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...); ++i) {
+    auto loop_body = [&](std::size_t i) {
       if constexpr (LIdx > 0) {
         do_assign_loop<LIdxMax, LIdx-1, TET, std::size_t, VTs...>(ie, i, vs...);
       } else {
         tref(ith_value<IndexTs::i>(i, vs...)...) += ie.eval(i, vs...);
       }
+    };
+
+    // The offset of the lower bound is at 2*LIdx, plus the additional (LIdxMax-LIdx) = LIdx+LidxMax.
+
+    if constexpr (OptsL::template should_vec<LIdx>() &&
+                  OptsL::template should_unroll<LIdx>()) {
+      constexpr std::size_t uc = OptsL::template get_unroll<LIdx>();
+#if defined(__clang__)
+#pragma unroll uc
+#if defined(__INTEL_LLVM_COMPILER)
+#pragma ivdep
+#endif // __INTEL_LLVM_COMPILER
+#pragma clang loop vectorize(assume_safety) interleave(assume_safety)
+#elif defined(__NVCOMPILER) || defined(__INTEL_COMPILER)
+#pragma unroll uc
+#pragma ivdep
+#elif defined(__GNUC__)
+// Note: This does not work because GCC cannot deal with the fact that uc
+// might not be a constant express when this branch is not evaluated.
+// #pragma GCC unroll uc
+#pragma GCC ivdep
+#elif defined(_MSC_VER)
+#pragma loop(ivdep)
+#endif
+      for (std::size_t i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...); ++i)
+        loop_body(i);
+
+    } else if constexpr (OptsL::template should_vec<LIdx>()) {
+#if defined(__clang__)
+#if defined(__INTEL_LLVM_COMPILER)
+#pragma ivdep
+#endif // __INTEL_LLVM_COMPILER
+#pragma clang loop vectorize(assume_safety) interleave(assume_safety)
+#elif defined(__NVCOMPILER) || defined(__INTEL_COMPILER)
+#pragma ivdep
+#elif defined(__GNUC__)
+#pragma GCC ivdep
+#elif defined(_MSC_VER)
+#pragma loop(ivdep)
+#endif
+      for (std::size_t i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...); ++i)
+        loop_body(i);
+    } else if constexpr (OptsL::template should_unroll<LIdx>()) {
+      constexpr std::size_t uc = OptsL::template get_unroll<LIdx>();
+#if defined(__clang__)
+#pragma unroll uc
+#elif defined(__GNUC__)
+// Note: This does not work because GCC cannot deal with the fact that uc
+// might not be a constant express when this branch is not evaluated.
+// #pragma GCC unroll uc
+#endif
+      for (std::size_t i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...); ++i)
+        loop_body(i);
+    } else {
+      for (std::size_t i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...); ++i)
+        loop_body(i);
     }
   }
 
-  template <std::size_t Rec, std::size_t LIdxMax, typename TET, typename... VTs, std::size_t... Is>
+  template <std::size_t LIdxMax, typename TET, typename... VTs, std::size_t... Is>
   void do_assign_loop_rec(const TET &ie, std::index_sequence<Is...> is, VTs ...vs) {
-    if constexpr (Rec) {
+    if constexpr (OptsL::get_rec()) {
       // Use a cache-oblivious looping structure (based on the well-known
       // work by Frigo et al.). Split the largest dimension (so long as the
-      // largest dimension is not greater than Rec).
+      // largest dimension is greater than Rec).
 
       std::size_t bounds[sizeof...(VTs)] = { vs... };
 
@@ -492,15 +641,15 @@ private:
         }
       }
 
-      if (ms > Rec) {
+      if (ms > OptsL::get_rec()) {
         std::size_t bounds_l[sizeof...(VTs)] = { vs... };
         std::size_t bounds_u[sizeof...(VTs)] = { vs... };
 
         bounds_l[msi+1] -= (ms+1)/2;
         bounds_u[msi]   += ms/2;
 
-        do_assign_loop_rec<Rec, LIdxMax, TET>(ie, is, bounds_l[Is]...);
-        do_assign_loop_rec<Rec, LIdxMax, TET>(ie, is, bounds_u[Is]...);
+        do_assign_loop_rec<LIdxMax, TET>(ie, is, bounds_l[Is]...);
+        do_assign_loop_rec<LIdxMax, TET>(ie, is, bounds_u[Is]...);
         return;
       }
     }
@@ -508,56 +657,59 @@ private:
     do_assign_loop<LIdxMax, LIdxMax, TET, VTs...>(ie, vs...);
   }
 
-  template <std::size_t Rec, std::size_t LIdxMax, typename TET, typename... VTs>
+  template <std::size_t LIdxMax, typename TET, typename... VTs>
   void do_assign_loop_rec(const TET &ie, VTs ...vs) {
-    do_assign_loop_rec<Rec, LIdxMax>(ie, std::index_sequence_for<VTs...>{}, vs...);
+    do_assign_loop_rec<LIdxMax>(ie, std::index_sequence_for<VTs...>{}, vs...);
   }
 
-  template <std::size_t Rec, std::size_t LIdxMax, std::size_t LIdx, typename TET, typename... VTs>
+  template <std::size_t LIdxMax, std::size_t LIdx, typename TET, typename... VTs>
   void do_assign_loop_setup(const TET &ie, VTs ...vs) {
     static_assert(has_index<LIdx>() || TET::template has_index<LIdx>());
     std::size_t n = has_index<LIdx>() ?
       dim_size_for_index_use<LIdx>() : ie.template dim_size_for_index_use<LIdx>();
 
     if constexpr (LIdx > 0)
-      do_assign_loop_setup<Rec, LIdxMax, LIdx-1, TET, std::size_t, std::size_t, VTs...>(ie, 0, n, vs...);
+      do_assign_loop_setup<LIdxMax, LIdx-1, TET, std::size_t, std::size_t, VTs...>(ie, 0, n, vs...);
     else
-      do_assign_loop_rec<Rec, LIdxMax, TET, std::size_t, std::size_t, VTs...>(ie, 0, n, vs...);
+      do_assign_loop_rec<LIdxMax, TET, std::size_t, std::size_t, VTs...>(ie, 0, n, vs...);
   }
 
 public:
   template <typename TET, typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
-  indexed_tensor_exp<TT, IndexTs...> & operator = (const TET &ie) {
+  indexed_tensor_exp<TT, OptsL, IndexTs...> & operator = (const TET &ie) {
     std::fill(tref.begin(), tref.end(), 0);
-    do_assign_loop_setup<MINI_TENSOR_RECURSE_SIZE, TET::max_index(), TET::max_index(), TET>(ie);
+    do_assign_loop_setup<TET::max_index(), TET::max_index(), TET>(ie);
     return *this;
   }
 
   template <typename TET, typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
-  indexed_tensor_exp<TT, IndexTs...> & operator += (const TET &ie) {
-    do_assign_loop_setup<MINI_TENSOR_RECURSE_SIZE, TET::max_index(), TET::max_index(), TET>(ie);
+  indexed_tensor_exp<TT, OptsL, IndexTs...> & operator += (const TET &ie) {
+    do_assign_loop_setup<TET::max_index(), TET::max_index(), TET>(ie);
     return *this;
   }
 
   template <typename TET, typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
-  indexed_tensor_exp<TT, IndexTs...> & operator -= (const TET &ie) {
-    do_assign_loop_setup<MINI_TENSOR_RECURSE_SIZE, TET::max_index(), TET::max_index(), TET>(-ie);
+  indexed_tensor_exp<TT, OptsL, IndexTs...> & operator -= (const TET &ie) {
+    do_assign_loop_setup<TET::max_index(), TET::max_index(), TET>(-ie);
     return *this;
   }
 
-  template <std::size_t Rec = MINI_TENSOR_RECURSE_SIZE, typename TET,
-            typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
-  indexed_tensor_exp<TT, IndexTs...> & assign(const TET &ie) {
-    std::fill(tref.begin(), tref.end(), 0);
-    do_assign_loop_setup<Rec, TET::max_index(), TET::max_index(), TET>(ie);
-    return *this;
+  template <typename... OptIndexTs,
+            typename = std::enable_if_t<(is_index_v<OptIndexTs> && ...)>>
+  decltype(auto) vectorize(OptIndexTs... idxs) {
+    return indexed_tensor_exp<TT, typename OptsL::template with_vec<OptIndexTs...>, IndexTs...>(tref);
   }
 
-  template <std::size_t Rec = MINI_TENSOR_RECURSE_SIZE, typename TET,
-            typename = std::enable_if_t<std::is_base_of_v<indexed_exp, TET>>>
-  indexed_tensor_exp<TT, IndexTs...> & update(const TET &ie) {
-    do_assign_loop_setup<Rec, TET::max_index(), TET::max_index(), TET>(ie);
-    return *this;
+  template <std::size_t UCount = MINI_TENSOR_UNROLL_COUNT,
+            typename... OptIndexTs,
+            typename = std::enable_if_t<(is_index_v<OptIndexTs> && ...)>>
+  decltype(auto) unroll(OptIndexTs... idxs) {
+    return indexed_tensor_exp<TT, typename OptsL::template with_unroll<UCount, OptIndexTs...>, IndexTs...>(tref);
+  }
+
+  template <std::size_t Rec>
+  decltype(auto) recurse() {
+    return indexed_tensor_exp<TT, typename OptsL::template with_rec<Rec>, IndexTs...>(tref);
   }
 
 protected:
@@ -682,8 +834,8 @@ public:
   template <typename... Ts,
             typename = std::enable_if_t<(sizeof...(Ts) == DimsT::rank+1) &&
                                         (is_index_v<Ts> && ...)>>
-  indexed_tensor_exp<TT, Ts...> operator () (Ts... idxs) {
-    return indexed_tensor_exp<TT, Ts...>(base());
+  indexed_tensor_exp<TT, opts_list<>, Ts...> operator () (Ts... idxs) {
+    return indexed_tensor_exp<TT, opts_list<>, Ts...>(base());
   }
 
   template <typename... Ts,

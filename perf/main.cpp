@@ -11,7 +11,7 @@
 
 namespace mt = mini_tensor;
 
-template <typename ST, std::size_t LI, std::size_t LJ, std::size_t LK>
+template <typename ST, std::size_t LI, std::size_t LJ, std::size_t LK, bool NoAlias = false>
 static void tests(std::size_t ntrials) {
   {
     ST v = 2.0f;
@@ -30,7 +30,10 @@ static void tests(std::size_t ntrials) {
       t1 = 0;
       auto start = std::chrono::steady_clock::now();
 
-      t1(_i, _j) += t1b(_j, _k)*t1c(_i, _k);
+      if constexpr (NoAlias)
+        t1(_i, _j).vectorize(_k) += (t1b(_j, _k)*t1c(_i, _k));
+      else
+        t1(_i, _j) += t1b(_j, _k)*t1c(_i, _k);
 
       auto end = std::chrono::steady_clock::now();
       auto duration =
@@ -38,7 +41,7 @@ static void tests(std::size_t ntrials) {
       all_durations += duration;
     }
 
-    std::cout << "mt: " << LI << ", " << LJ << ", " << LK << ": " <<
+    std::cout << "mt" << NoAlias << ": " << LI << ", " << LJ << ", " << LK << ": " <<
                  (all_durations / ntrials) << " ns\n";
   }
 }
@@ -50,6 +53,7 @@ static void tests_p(std::size_t ntrials) {
   tests<ST, 1, 2, 0>(ntrials);
 #endif
   tests<ST, 2, 1, 0>(ntrials);
+  tests<ST, 2, 1, 0, true>(ntrials);
 #ifndef MINI_TENSOR_TEST_210_ONLY
   tests<ST, 0, 2, 1>(ntrials);
   tests<ST, 2, 0, 1>(ntrials);
