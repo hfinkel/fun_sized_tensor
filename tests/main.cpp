@@ -199,7 +199,8 @@ static bool tests() {
 
     t1(_i, _j) = t1b(_i, _k)*t1c(_k, _j);
 
-    if (t1(1, 1) != ST(200)) {
+    if (t1(1, 1) != ST(200) ||
+        std::accumulate(t1.begin(), t1.end(), 0.f) != ST(700000)) {
       std::cout << "FAILED!\n";
       return false;
     }
