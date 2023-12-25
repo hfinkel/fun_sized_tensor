@@ -24,6 +24,10 @@
 #define MINI_TENSOR_UNROLL_COUNT 4
 #endif
 
+#ifndef MINI_TENSOR_ARRAY_ALIGNMENT
+#define MINI_TENSOR_ARRAY_ALIGNMENT 64
+#endif
+
 namespace mini_tensor {
 namespace detail {
 template <std::size_t I, typename T0, typename... Ts>
@@ -871,12 +875,13 @@ protected:
 
 template <typename T, typename DimsT,
           template <typename, std::size_t, typename...> typename ContainerT = std::array,
+          std::size_t ArrayAlign = MINI_TENSOR_ARRAY_ALIGNMENT,
           typename... ContainerTTs>
 struct tensor :
-  public detail::tensor_base<tensor<T, DimsT, ContainerT, ContainerTTs...>,
+  public detail::tensor_base<tensor<T, DimsT, ContainerT, ArrayAlign, ContainerTTs...>,
                              typename detail::dims_split_head<DimsT>::inner_dims_t,
                              ContainerT<T, DimsT::base_size(), ContainerTTs...>> {
-  using Base = detail::tensor_base<tensor<T, DimsT, ContainerT, ContainerTTs...>,
+  using Base = detail::tensor_base<tensor<T, DimsT, ContainerT, ArrayAlign, ContainerTTs...>,
                                    typename detail::dims_split_head<DimsT>::inner_dims_t,
                                    ContainerT<T, DimsT::base_size(), ContainerTTs...>>;
   friend Base;
@@ -893,7 +898,7 @@ struct tensor :
   }
 
 protected:
-  ContainerT<T, DimsT::base_size(), ContainerTTs...> container;
+  alignas(ArrayAlign) ContainerT<T, DimsT::base_size(), ContainerTTs...> container;
 };
 } // namespace mini_tensor
 
