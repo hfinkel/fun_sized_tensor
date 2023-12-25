@@ -7,6 +7,7 @@
 #include <array>
 #include <algorithm>
 #include <functional>
+#include <new>
 #include <numeric>
 #include <tuple>
 #include <type_traits>
@@ -25,7 +26,13 @@
 #endif
 
 #ifndef MINI_TENSOR_ARRAY_ALIGNMENT
+// hardware_destructive_interference_size was added in C++17, but many
+// implementations were not quick to ship it. Provide a reasonable fallback.
+#ifdef __cpp_lib_hardware_interference_size
+#define MINI_TENSOR_ARRAY_ALIGNMENT std::hardware_destructive_interference_size
+#else
 #define MINI_TENSOR_ARRAY_ALIGNMENT 64
+#endif
 #endif
 
 namespace mini_tensor {
