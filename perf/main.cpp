@@ -45,12 +45,16 @@ static void tests(std::size_t ntrials) {
 
 template <typename ST>
 static void tests_p(std::size_t ntrials) {
+#ifndef MINI_TENSOR_TEST_210_ONLY
   tests<ST, 0, 1, 2>(ntrials);
   tests<ST, 1, 2, 0>(ntrials);
+#endif
   tests<ST, 2, 1, 0>(ntrials);
+#ifndef MINI_TENSOR_TEST_210_ONLY
   tests<ST, 0, 2, 1>(ntrials);
   tests<ST, 2, 0, 1>(ntrials);
   tests<ST, 1, 0, 2>(ntrials);
+#endif
 }
 
 template <typename ST>
@@ -120,7 +124,9 @@ static void tests_n2(std::size_t ntrials) {
 template <typename ST>
 static void tests_n(std::size_t ntrials) {
   tests_n1<ST>(ntrials);
+#ifndef MINI_TENSOR_TEST_210_ONLY
   tests_n2<ST>(ntrials);
+#endif
 }
 
 int main() {
