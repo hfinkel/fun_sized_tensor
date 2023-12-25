@@ -245,6 +245,70 @@ static bool tests() {
     std::cout << "PASSED.\n";
   }
 
+  {
+    std::cout << "TEST 15: ";
+    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
+    mt::tensor_odyn<ST, mt::dims<50>> t1b(35, 2.0f);
+    mt::tensor_odyn<ST, mt::dims<100>> t1c(50, 2.0f);
+
+    t1(_i, _j).unroll(_j) = t1b(_i, _k)*t1c(_k, _j);
+
+    if (t1(1, 1) != ST(200) ||
+        std::accumulate(t1.begin(), t1.end(), 0.f) != ST(700000)) {
+      std::cout << "FAILED!\n";
+      return false;
+    }
+    std::cout << "PASSED.\n";
+  }
+
+  {
+    std::cout << "TEST 16: ";
+    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
+    mt::tensor_odyn<ST, mt::dims<50>> t1b(35, 2.0f);
+    mt::tensor_odyn<ST, mt::dims<100>> t1c(50, 2.0f);
+
+    t1(_i, _j).unroll(_j, _i) = t1b(_i, _k)*t1c(_k, _j);
+
+    if (t1(1, 1) != ST(200) ||
+        std::accumulate(t1.begin(), t1.end(), 0.f) != ST(700000)) {
+      std::cout << "FAILED!\n";
+      return false;
+    }
+    std::cout << "PASSED.\n";
+  }
+
+  {
+    std::cout << "TEST 17: ";
+    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
+    mt::tensor_odyn<ST, mt::dims<50>> t1b(35, 2.0f);
+    mt::tensor_odyn<ST, mt::dims<100>> t1c(50, 2.0f);
+
+    t1(_i, _j).unroll(_i).template recurse<6>() = t1b(_i, _k)*t1c(_k, _j);
+
+    if (t1(1, 1) != ST(200) ||
+        std::accumulate(t1.begin(), t1.end(), 0.f) != ST(700000)) {
+      std::cout << "FAILED!\n";
+      return false;
+    }
+    std::cout << "PASSED.\n";
+  }
+
+  {
+    std::cout << "TEST 18: ";
+    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
+    mt::tensor_odyn<ST, mt::dims<50>> t1b(35, 2.0f);
+    mt::tensor_odyn<ST, mt::dims<100>> t1c(50, 2.0f);
+
+    t1(_i, _j).vectorize(_i).unroll(_i) = t1b(_i, _k)*t1c(_k, _j);
+
+    if (t1(1, 1) != ST(200) ||
+        std::accumulate(t1.begin(), t1.end(), 0.f) != ST(700000)) {
+      std::cout << "FAILED!\n";
+      return false;
+    }
+    std::cout << "PASSED.\n";
+  }
+
   return true;
 }
 

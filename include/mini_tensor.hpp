@@ -609,6 +609,9 @@ private:
 #elif defined(__NVCOMPILER) || defined(__INTEL_COMPILER)
 #pragma ivdep
 #elif defined(__GNUC__)
+// Note that this may cause GCC to produce a "warning: ignoring loop
+// annotation" message, and this may happen even in cases where the directive
+// was not actually ignored.
 #pragma GCC ivdep
 #elif defined(_MSC_VER)
 #pragma loop(ivdep)
