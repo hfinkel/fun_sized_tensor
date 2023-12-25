@@ -31,9 +31,9 @@ static void tests(std::size_t ntrials) {
       auto start = std::chrono::steady_clock::now();
 
       if constexpr (NoAlias)
-        t1(_i, _j).vectorize(_k) += (t1b(_j, _k)*t1c(_i, _k));
+        t1(_i, _j).vectorize(_k).unroll(_j) += (t1b(_j, _k)*t1c(_i, _k));
       else
-        t1(_i, _j) += t1b(_j, _k)*t1c(_i, _k);
+        t1(_i, _j).unroll(_k) += t1b(_j, _k)*t1c(_i, _k);
 
       auto end = std::chrono::steady_clock::now();
       auto duration =

@@ -556,6 +556,19 @@ struct indexed_tensor_exp : public indexed_exp {
   }
 
 private:
+  template <std::size_t Count, typename LoopBody>
+  static void repeat_loop_body(std::size_t i, LoopBody loop_body) {
+#if defined(__clang__)
+#pragma unroll Count
+#elif defined(__GNUC__)
+// Note: This does not work because GCC cannot deal with the fact that Count
+// is not a fixed constant expression.
+// #pragma GCC unroll Count
+#endif
+    for (std::size_t j = 0; j < Count; ++j)
+      loop_body(i + j);
+  }
+
   template <std::size_t LIdxMax, std::size_t LIdx, typename TET, typename... VTs>
   void do_assign_loop(const TET &ie, VTs ...vs) {
     auto loop_body = [&](std::size_t i) {
@@ -568,30 +581,10 @@ private:
 
     // The offset of the lower bound is at 2*LIdx, plus the additional (LIdxMax-LIdx) = LIdx+LidxMax.
 
-    if constexpr (OptsL::template should_vec<LIdx>() &&
-                  OptsL::template should_unroll<LIdx>()) {
-      constexpr std::size_t uc = OptsL::template get_unroll<LIdx>();
-#if defined(__clang__)
-#pragma unroll uc
-#if defined(__INTEL_LLVM_COMPILER)
-#pragma ivdep
-#endif // __INTEL_LLVM_COMPILER
-#pragma clang loop vectorize(assume_safety) interleave(assume_safety)
-#elif defined(__NVCOMPILER) || defined(__INTEL_COMPILER)
-#pragma unroll uc
-#pragma ivdep
-#elif defined(__GNUC__)
-// Note: This does not work because GCC cannot deal with the fact that uc
-// might not be a constant express when this branch is not evaluated.
-// #pragma GCC unroll uc
-#pragma GCC ivdep
-#elif defined(_MSC_VER)
-#pragma loop(ivdep)
-#endif
-      for (std::size_t i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...); ++i)
-        loop_body(i);
-
-    } else if constexpr (OptsL::template should_vec<LIdx>()) {
+    if constexpr (OptsL::template should_vec<LIdx>()) {
+      constexpr std::size_t uc = OptsL::template should_unroll<LIdx>() ?
+                                 OptsL::template get_unroll<LIdx>() : 1;
+      std::size_t i;
 #if defined(__clang__)
 #if defined(__INTEL_LLVM_COMPILER)
 #pragma ivdep
@@ -604,19 +597,19 @@ private:
 #elif defined(_MSC_VER)
 #pragma loop(ivdep)
 #endif
-      for (std::size_t i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...); ++i)
-        loop_body(i);
+      for (i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...) - (uc - 1); i += uc)
+        repeat_loop_body<uc>(i, loop_body);
+      if constexpr (uc > 1)
+        for (; i < ith_value<LIdx+LIdxMax+1>(vs...); ++i)
+          loop_body(i);
     } else if constexpr (OptsL::template should_unroll<LIdx>()) {
       constexpr std::size_t uc = OptsL::template get_unroll<LIdx>();
-#if defined(__clang__)
-#pragma unroll uc
-#elif defined(__GNUC__)
-// Note: This does not work because GCC cannot deal with the fact that uc
-// might not be a constant express when this branch is not evaluated.
-// #pragma GCC unroll uc
-#endif
-      for (std::size_t i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...); ++i)
-        loop_body(i);
+      std::size_t i;
+      for (i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...) - (uc - 1); i += uc)
+        repeat_loop_body<uc>(i, loop_body);
+      if constexpr (uc > 1)
+        for (; i < ith_value<LIdx+LIdxMax+1>(vs...); ++i)
+          loop_body(i);
     } else {
       for (std::size_t i = ith_value<LIdx+LIdxMax>(vs...); i < ith_value<LIdx+LIdxMax+1>(vs...); ++i)
         loop_body(i);
