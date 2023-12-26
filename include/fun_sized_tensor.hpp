@@ -16,31 +16,31 @@
 #include <utility>
 #include <vector>
 
-#ifndef MINI_TENSOR_HPP_INCLUDED
-#define MINI_TENSOR_HPP_INCLUDED
+#ifndef FUN_SIZED_TENSOR_HPP_INCLUDED
+#define FUN_SIZED_TENSOR_HPP_INCLUDED
 
-#ifndef MINI_TENSOR_RECURSE_SIZE
-#define MINI_TENSOR_RECURSE_SIZE 16
+#ifndef FUN_SIZED_TENSOR_RECURSE_SIZE
+#define FUN_SIZED_TENSOR_RECURSE_SIZE 16
 #endif
 
-#ifndef MINI_TENSOR_UNROLL_COUNT
-#define MINI_TENSOR_UNROLL_COUNT 4
+#ifndef FUN_SIZED_TENSOR_UNROLL_COUNT
+#define FUN_SIZED_TENSOR_UNROLL_COUNT 4
 #endif
 
-#ifndef MINI_TENSOR_ARRAY_ALIGNMENT
+#ifndef FUN_SIZED_TENSOR_ARRAY_ALIGNMENT
 // hardware_destructive_interference_size was added in C++17, but many
 // implementations were not quick to ship it. Also, using it, by default,
 // produces a warning under GCC (without the -Wno-interference-size flag).
 // Thus, we'll provide a way to use it, but won't do so by default. Provide a
 // reasonable fallback.
-#if defined(__cpp_lib_hardware_interference_size) && defined(MINI_TENSOR_USE_INTERFERENCE_SIZE)
-#define MINI_TENSOR_ARRAY_ALIGNMENT std::hardware_destructive_interference_size
+#if defined(__cpp_lib_hardware_interference_size) && defined(FUN_SIZED_TENSOR_USE_INTERFERENCE_SIZE)
+#define FUN_SIZED_TENSOR_ARRAY_ALIGNMENT std::hardware_destructive_interference_size
 #else
-#define MINI_TENSOR_ARRAY_ALIGNMENT 64
+#define FUN_SIZED_TENSOR_ARRAY_ALIGNMENT 64
 #endif
 #endif
 
-namespace mini_tensor {
+namespace fun_sized_tensor {
 namespace detail {
 template <std::size_t I, typename T0, typename... Ts>
 inline constexpr decltype(auto) ith_value(T0 t0, Ts... ts) {
@@ -512,7 +512,7 @@ struct opts_list {
 
   static constexpr std::size_t get_rec() {
     if (!(Opts::has_rec() || ...))
-      return MINI_TENSOR_RECURSE_SIZE;
+      return FUN_SIZED_TENSOR_RECURSE_SIZE;
 
     return (std::size_t(0) + ... + Opts::get_rec());
   }
@@ -712,7 +712,7 @@ public:
     return indexed_tensor_exp<TT, typename OptsL::template with_vec<OptIndexTs...>, IndexTs...>(tref);
   }
 
-  template <std::size_t UCount = MINI_TENSOR_UNROLL_COUNT,
+  template <std::size_t UCount = FUN_SIZED_TENSOR_UNROLL_COUNT,
             typename... OptIndexTs,
             typename = std::enable_if_t<(is_index_v<OptIndexTs> && ...)>>
   decltype(auto) unroll(OptIndexTs... idxs) {
@@ -859,7 +859,7 @@ public:
 };
 } // namespace detail
 
-template <typename T, std::size_t Align = MINI_TENSOR_ARRAY_ALIGNMENT>
+template <typename T, std::size_t Align = FUN_SIZED_TENSOR_ARRAY_ALIGNMENT>
 struct aligned_allocator {
   using value_type = T;
   using size_type = std::size_t;
@@ -950,7 +950,7 @@ protected:
 
 template <typename T, typename DimsT,
           template <typename, std::size_t, typename...> typename ContainerT = std::array,
-          std::size_t ArrayAlign = MINI_TENSOR_ARRAY_ALIGNMENT,
+          std::size_t ArrayAlign = FUN_SIZED_TENSOR_ARRAY_ALIGNMENT,
           typename... ContainerTTs>
 struct tensor :
   public detail::tensor_base<tensor<T, DimsT, ContainerT, ArrayAlign, ContainerTTs...>,
@@ -975,7 +975,7 @@ struct tensor :
 protected:
   alignas(ArrayAlign) ContainerT<T, DimsT::base_size(), ContainerTTs...> container;
 };
-} // namespace mini_tensor
+} // namespace fun_sized_tensor
 
-#endif // MINI_TENSOR_HPP_INCLUDED
+#endif // FUN_SIZED_TENSOR_HPP_INCLUDED
 

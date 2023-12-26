@@ -4,17 +4,17 @@
 //          https://www.boost.org/LICENSE_1_0.txt)
 // SPDX-License-Identifier: BSL-1.0
 
-#include "../include/mini_tensor.hpp"
+#include "../include/fun_sized_tensor.hpp"
 
 #include <iostream>
 
-namespace mt = mini_tensor;
+namespace fst = fun_sized_tensor;
 
 template <typename ST>
 static bool tests() {
   {
     std::cout << "TEST 1: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
     if (t1.size() != 3500 ||
         t1.storage_index(6, 5) != 605) {
       std::cout << "FAILED!\n";
@@ -25,7 +25,7 @@ static bool tests() {
 
   {
     std::cout << "TEST 2: ";
-    mt::tensor_odyn<ST, mt::dims<20, 10>> t1(222, 1.0f);
+    fst::tensor_odyn<ST, fst::dims<20, 10>> t1(222, 1.0f);
     if (t1.size() != 44400 ||
         t1.storage_index(5, 6, 7) != 1067 ||
         t1(5, 6, 7) != ST(1)) {
@@ -37,7 +37,7 @@ static bool tests() {
 
   {
     std::cout << "TEST 3: ";
-    mt::tensor<ST, mt::dims<444, 20, 10>> t1;
+    fst::tensor<ST, fst::dims<444, 20, 10>> t1;
     t1 = 5;
     if (t1.size() != 88800 ||
         t1.storage_index(5, 6, 7) != 1067 ||
@@ -48,14 +48,14 @@ static bool tests() {
     std::cout << "PASSED.\n";
   }
 
-  mt::index<0> _i;
-  mt::index<1> _j;
-  mt::index<2> _k;
+  fst::index<0> _i;
+  fst::index<1> _j;
+  fst::index<2> _k;
 
   {
     std::cout << "TEST 4: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<100>> t1b(35, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<100>> t1b(35, 2.0f);
 
     t1(_i, _j) = t1b(_i, _j);
     if (t1(1, 1) != ST(2)) {
@@ -67,8 +67,8 @@ static bool tests() {
 
   {
     std::cout << "TEST 5: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<100>> t1c(35, 8.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<100>> t1c(35, 8.0f);
     t1 = t1c;
     t1 += t1c;
     t1 += t1c;
@@ -82,8 +82,8 @@ static bool tests() {
 
   {
     std::cout << "TEST 6: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<100>> t1c(35, 8.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<100>> t1c(35, 8.0f);
     t1(_i, _j) = t1c(_i, _j);
     t1(_i, _j) += t1c(_i, _j);
     t1(_i, _j) -= t1c(_i, _j);
@@ -96,7 +96,7 @@ static bool tests() {
 
   {
     std::cout << "TEST 7: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
     t1 = 5.0f;
     ST v1 = t1(1, 1);
     t1 *= 5.0f;
@@ -121,8 +121,8 @@ static bool tests() {
 
   {
     std::cout << "TEST 8: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<35>> t1b(100, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<35>> t1b(100, 2.0f);
 
     t1(_i, _j) = t1b(_j, _i);
 
@@ -135,8 +135,8 @@ static bool tests() {
 
   {
     std::cout << "TEST 9: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor<ST, mt::dims<100, 35>> t1b;
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor<ST, fst::dims<100, 35>> t1b;
     t1b = 2.0f;
 
     t1(_i, _j) = t1b(_j, _i);
@@ -150,8 +150,8 @@ static bool tests() {
 
   {
     std::cout << "TEST 10: ";
-    mt::tensor<ST, mt::dims<35, 100>> t1;
-    mt::tensor<ST, mt::dims<100, 35>> t1b;
+    fst::tensor<ST, fst::dims<35, 100>> t1;
+    fst::tensor<ST, fst::dims<100, 35>> t1b;
     t1b = 2.0f;
 
     t1(_i, _j) = t1b(_j, _i);
@@ -165,8 +165,8 @@ static bool tests() {
 
   {
     std::cout << "TEST 11: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<35>> t1b(100, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<35>> t1b(100, 2.0f);
 
     t1(_i, _j) = -t1b(_j, _i);
 
@@ -179,8 +179,8 @@ static bool tests() {
 
   {
     std::cout << "TEST 11: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<35>> t1b(100, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<35>> t1b(100, 2.0f);
 
     t1(_i, _j) = +t1b(_j, _i);
 
@@ -193,9 +193,9 @@ static bool tests() {
 
   {
     std::cout << "TEST 12: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<50>> t1b(35, 2.0f);
-    mt::tensor_odyn<ST, mt::dims<100>> t1c(50, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<50>> t1b(35, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1c(50, 2.0f);
 
     t1(_i, _j) = t1b(_i, _k)*t1c(_k, _j);
 
@@ -210,9 +210,9 @@ static bool tests() {
   {
     std::cout << "TEST 13: ";
     ST v = 2.0f;
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<50>> t1b(35, v);
-    mt::tensor_odyn<ST, mt::dims<100>> t1c(50, v);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<50>> t1b(35, v);
+    fst::tensor_odyn<ST, fst::dims<100>> t1c(50, v);
 
     ST a = 2.4, d = 5.4;
     t1(_i, _j) = (t1b(_i, _k)+a)*(t1c(_k, _j) - d);
@@ -229,9 +229,9 @@ static bool tests() {
   {
     std::cout << "TEST 14: ";
     ST v = 2.0f;
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<50>> t1b(35, v);
-    mt::tensor_odyn<ST, mt::dims<100>> t1c(50, v);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<50>> t1b(35, v);
+    fst::tensor_odyn<ST, fst::dims<100>> t1c(50, v);
 
     ST a = 2.4, b = 3.4, c = 4.4, d = 5.4, e = 8.2;
     t1(_i, _j) = 1 / (b*t1b(_i, _k)+a)*(c - t1c(_k, _j) - d) / e;
@@ -247,9 +247,9 @@ static bool tests() {
 
   {
     std::cout << "TEST 15: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<50>> t1b(35, 2.0f);
-    mt::tensor_odyn<ST, mt::dims<100>> t1c(50, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<50>> t1b(35, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1c(50, 2.0f);
 
     t1(_i, _j).unroll(_j) = t1b(_i, _k)*t1c(_k, _j);
 
@@ -263,9 +263,9 @@ static bool tests() {
 
   {
     std::cout << "TEST 16: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<50>> t1b(35, 2.0f);
-    mt::tensor_odyn<ST, mt::dims<100>> t1c(50, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<50>> t1b(35, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1c(50, 2.0f);
 
     t1(_i, _j).unroll(_j, _i) = t1b(_i, _k)*t1c(_k, _j);
 
@@ -279,9 +279,9 @@ static bool tests() {
 
   {
     std::cout << "TEST 17: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<50>> t1b(35, 2.0f);
-    mt::tensor_odyn<ST, mt::dims<100>> t1c(50, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<50>> t1b(35, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1c(50, 2.0f);
 
     t1(_i, _j).unroll(_i).template recurse<6>() = t1b(_i, _k)*t1c(_k, _j);
 
@@ -295,9 +295,9 @@ static bool tests() {
 
   {
     std::cout << "TEST 18: ";
-    mt::tensor_odyn<ST, mt::dims<100>> t1(35);
-    mt::tensor_odyn<ST, mt::dims<50>> t1b(35, 2.0f);
-    mt::tensor_odyn<ST, mt::dims<100>> t1c(50, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1(35);
+    fst::tensor_odyn<ST, fst::dims<50>> t1b(35, 2.0f);
+    fst::tensor_odyn<ST, fst::dims<100>> t1c(50, 2.0f);
 
     t1(_i, _j).vectorize(_i).unroll(_i) = t1b(_i, _k)*t1c(_k, _j);
 
