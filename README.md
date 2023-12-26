@@ -2,7 +2,7 @@
 
 ## What is MiniTensor?
 
-MiniTensor is a header-only C++ library (currently requiring C++17) that uses [variadic templates](https://en.wikipedia.org/wiki/Variadic_template) to allow succinctly expressing simple tensor operations of any dimension, making use of [expression templates](https://en.wikipedia.org/wiki/Expression_templates) to avoid materializing intermediate temporaries.
+MiniTensor is a header-only C++ library (currently requiring C++17) that uses [variadic templates](https://en.wikipedia.org/wiki/Variadic_template) to allow succinctly expressing simple tensor operations of any dimension, making use of [expression templates](https://en.wikipedia.org/wiki/Expression_templates) to avoid materializing intermediate temporaries. The evaluation loop nests use a recursive [cache-oblivious](https://en.wikipedia.org/wiki/Cache-oblivious_algorithm) structure.
 
 ## Usage
 
